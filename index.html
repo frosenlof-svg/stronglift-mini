@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Strong Lift Mini</title>
+<style>
+  :root { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color-scheme:light; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#f4f4f5; color:#111; }
+  .app { max-width:560px; margin:0 auto; padding:18px 14px 40px; }
+  .top { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+  h1 { margin:0 0 2px; font-size:29px; }
+  h2 { font-size:20px; margin:24px 0 8px; }
+  .sub { color:#666; }
+  .card { background:#fff; border-radius:17px; padding:16px; margin:12px 0; box-shadow:0 1px 5px rgba(0,0,0,.08); }
+  .exercise-line { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .exercise { font-size:21px; font-weight:750; }
+  .weight { font-size:21px; font-weight:750; }
+  .tiny { font-size:12px; color:#777; line-height:1.4; }
+  .sets { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-top:14px; }
+  .setbtn { width:100%; margin:0; padding:12px 4px; background:#ececef; color:#111; border:0; border-radius:11px; font-size:15px; font-weight:700; }
+  .setbtn.done { background:#111; color:#fff; }
+  button { border:0; border-radius:14px; padding:14px; font-size:17px; font-weight:700; }
+  .wide { width:100%; margin-top:12px; }
+  .primary { background:#111; color:#fff; }
+  .secondary { background:#e5e5e7; color:#111; }
+  .ghost { background:#fff; color:#111; border:1px solid #d5d5d8; padding:9px 12px; font-size:14px; }
+  .timer { position:sticky; top:0; z-index:3; margin-bottom:12px; background:#111; color:#fff; border-radius:16px; padding:11px 14px; display:none; align-items:center; justify-content:space-between; box-shadow:0 4px 14px rgba(0,0,0,.14); }
+  .timer.show { display:flex; }
+  .timer-time { font-size:26px; font-variant-numeric:tabular-nums; font-weight:800; }
+  .timer button { width:auto; margin:0; padding:8px 11px; font-size:13px; background:#fff; color:#111; }
+  dialog { width:min(92vw,520px); border:0; border-radius:18px; padding:0; box-shadow:0 14px 50px rgba(0,0,0,.3); }
+  dialog::backdrop { background:rgba(0,0,0,.35); }
+  .modal { padding:18px; }
+  .setting { display:grid; grid-template-columns:1fr 110px; align-items:center; gap:12px; margin:12px 0; }
+  label { font-size:14px; color:#555; }
+  input { width:100%; font-size:17px; padding:10px; border:1px solid #ccc; border-radius:10px; }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .history-item { font-size:14px; padding:10px 0; border-bottom:1px solid #ddd; line-height:1.45; }
+  .completed { opacity:.72; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="timer" id="timerBar"><div><div class="tiny" style="color:#bbb">Vila</div><div class="timer-time" id="timerText">01:30</div></div><button id="skipTimer">Hoppa över</button></div>
+  <div class="top"><div><h1>Strong Lift Mini</h1><div class="sub" id="workoutTitle"></div></div><button class="ghost" id="settingsBtn">Inställningar</button></div>
+  <div id="exercises"></div><button class="primary wide" id="finishBtn">Avsluta pass</button>
+  <h2>Senaste pass</h2><div id="history"></div>
+</div>
+<dialog id="settingsDialog"><div class="modal"><h2 style="margin-top:0">Inställningar</h2><div class="tiny">Ändra vikten som ska visas nästa gång respektive övning dyker upp.</div><div id="weightSettings"></div><div class="setting"><label for="restSeconds">Vilotimer efter varje set</label><input id="restSeconds" type="number" min="0" step="15"></div><div class="row2"><button class="secondary" id="closeSettings">Stäng</button><button class="primary" id="saveSettings">Spara</button></div><button class="secondary wide" id="resetBtn">Återställ all data</button></div></dialog>
+<script>
+const PROGRAM={A:[{name:'Knäböj',sets:5,reps:5,inc:2.5},{name:'Bänkpress',sets:5,reps:5,inc:2.5},{name:'Stående rodd',sets:5,reps:5,inc:2.5}],B:[{name:'Knäböj',sets:5,reps:5,inc:2.5},{name:'Militärpress',sets:5,reps:5,inc:2.5},{name:'Marklyft',sets:1,reps:5,inc:5}]};
+const DEFAULT_WEIGHTS={'Knäböj':20,'Bänkpress':20,'Stående rodd':20,'Militärpress':20,'Marklyft':40}; const KEY='strongLiftMiniStateV2';
+let state=JSON.parse(localStorage.getItem(KEY)||'null')||{nextWorkout:'A',weights:{...DEFAULT_WEIGHTS},history:[],restSeconds:90,current:null}; let timerId=null,timerEnd=0;
+function save(){localStorage.setItem(KEY,JSON.stringify(state));}
+function ensureCurrent(){if(!state.current||state.current.workout!==state.nextWorkout){state.current={workout:state.nextWorkout,sets:{}};PROGRAM[state.nextWorkout].forEach(ex=>state.current.sets[ex.name]=Array(ex.sets).fill(false));save();}}
+function fmtWeight(w){return Number.isInteger(w)?String(w):String(w).replace('.',',');} function completed(ex){return(state.current.sets[ex.name]||[]).filter(Boolean).length;}
+function render(){ensureCurrent();document.getElementById('workoutTitle').textContent=`Pass ${state.nextWorkout}`;const wrap=document.getElementById('exercises');wrap.innerHTML='';PROGRAM[state.nextWorkout].forEach(ex=>{const done=completed(ex),all=done===ex.sets;const card=document.createElement('div');card.className='card'+(all?' completed':'');const sets=state.current.sets[ex.name];card.innerHTML=`<div class="exercise-line"><div class="exercise">${ex.name}</div><div class="weight">${fmtWeight(state.weights[ex.name])} kg</div></div><div class="tiny">${ex.sets} × ${ex.reps} · ${done}/${ex.sets} set klara · +${fmtWeight(ex.inc)} kg vid lyckat pass</div><div class="sets" style="grid-template-columns:repeat(${Math.min(ex.sets,5)},1fr)">${sets.map((v,i)=>`<button class="setbtn ${v?'done':''}" data-ex="${ex.name}" data-set="${i}">${v?'✓':i+1}</button>`).join('')}</div>`;wrap.appendChild(card);});renderHistory();}
+function renderHistory(){const hist=document.getElementById('history');hist.innerHTML=state.history.length?'':'<div class="tiny">Ingen historik ännu.</div>';state.history.slice(0,10).forEach(h=>{const el=document.createElement('div');el.className='history-item';el.textContent=`${h.date} · Pass ${h.workout}: `+h.items.map(x=>`${x.name} ${fmtWeight(x.weight)} kg ${x.success?'✓':'–'}`).join(', ');hist.appendChild(el);});}
+function startTimer(){if(!state.restSeconds||state.restSeconds<=0)return;clearInterval(timerId);timerEnd=Date.now()+state.restSeconds*1000;document.getElementById('timerBar').classList.add('show');updateTimer();timerId=setInterval(updateTimer,250);}
+function updateTimer(){const left=Math.max(0,Math.ceil((timerEnd-Date.now())/1000)),m=Math.floor(left/60),s=left%60;document.getElementById('timerText').textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;if(left<=0){clearInterval(timerId);timerId=null;document.getElementById('timerBar').classList.remove('show');if(navigator.vibrate)navigator.vibrate([120,80,120]);}}
+function stopTimer(){clearInterval(timerId);timerId=null;document.getElementById('timerBar').classList.remove('show');}
+document.getElementById('exercises').addEventListener('click',e=>{const b=e.target.closest('.setbtn');if(!b)return;const ex=b.dataset.ex,i=Number(b.dataset.set),was=state.current.sets[ex][i];state.current.sets[ex][i]=!was;save();render();if(!was)startTimer();});document.getElementById('skipTimer').onclick=stopTimer;
+document.getElementById('finishBtn').onclick=()=>{const workout=state.nextWorkout;const items=PROGRAM[workout].map(ex=>{const success=state.current.sets[ex.name].every(Boolean),weight=Number(state.weights[ex.name]);if(success)state.weights[ex.name]=weight+ex.inc;return{name:ex.name,weight,success};});const incomplete=items.filter(x=>!x.success);if(incomplete.length&&!confirm('Alla set är inte markerade som klara. Avsluta ändå?'))return;state.history.unshift({date:new Date().toLocaleDateString('sv-SE'),workout,items});state.history=state.history.slice(0,50);state.nextWorkout=workout==='A'?'B':'A';state.current=null;save();stopTimer();render();window.scrollTo({top:0,behavior:'smooth'});};
+const dlg=document.getElementById('settingsDialog');document.getElementById('settingsBtn').onclick=()=>{const ws=document.getElementById('weightSettings');ws.innerHTML='';Object.keys(DEFAULT_WEIGHTS).forEach(name=>{const d=document.createElement('div');d.className='setting';d.innerHTML=`<label>${name}</label><input type="number" step="0.5" data-weight="${name}" value="${state.weights[name]}">`;ws.appendChild(d);});document.getElementById('restSeconds').value=state.restSeconds??90;dlg.showModal();};document.getElementById('closeSettings').onclick=()=>dlg.close();document.getElementById('saveSettings').onclick=()=>{document.querySelectorAll('[data-weight]').forEach(inp=>state.weights[inp.dataset.weight]=Number(inp.value));state.restSeconds=Math.max(0,Number(document.getElementById('restSeconds').value)||0);save();dlg.close();render();};document.getElementById('resetBtn').onclick=()=>{if(confirm('Vill du radera alla vikter, pågående set och historik?')){localStorage.removeItem(KEY);location.reload();}};render();
+</script></body></html>
